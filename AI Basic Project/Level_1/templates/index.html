@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Indexer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        .chart-container { position: relative; height: 40vh; width: 100%; }
+        #loader { border: 8px solid #f3f3f3; border-top: 8px solid #3498db; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .tab-button.active { border-color: #3b82f6; background-color: #eff6ff; color: #1d4ed8; }
+        #sentence-modal { background-color: rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Text Indexer</h1>
+            <p class="mt-2 text-lg text-gray-600">텍스트 파일의 단어를 분석하고 검색할 수 있는 인덱스를 생성합니다.</p>
+        </header>
+
+        <!-- 제어판 -->
+        <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 border-b pb-2">파일 업로드 및 설정</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <label for="fileInput" class="block text-md font-medium text-gray-700 mb-2">분석할 텍스트 파일 (.txt)</label>
+                    <input type="file" id="fileInput" accept=".txt" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <p id="fileInfo" class="mt-2 text-sm text-gray-600"></p>
+                </div>
+                <div>
+                    <label for="stopWords" class="block text-md font-medium text-gray-700 mb-2">제외할 단어</label>
+                    <textarea id="stopWords" rows="3" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">a, an, the, and, but, or, for, nor, yet, so, in, on, at, of, to, with, by, from, about, above, across, after, against, around, before, behind, below, beneath, beside, between, beyond, down, during, except, inside, into, near, off, out, over, since, through, under, until, up, upon, i, you, he, she, it, we, they, me, him, her, us, them, my, your, his, its, our, their, is, am, are, was, were, be, being, been, has, have, had, do, does, did, will, would, shall, should, can, could, may, might, must</textarea>
+                </div>
+            </div>
+            <div class="mt-6 text-center">
+                <button id="processButton" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-full hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">인덱스 생성</button>
+            </div>
+        </div>
+        
+        <!-- 로딩 -->
+        <div id="loader-container" class="hidden flex-col items-center justify-center my-8">
+            <div id="loader"></div>
+            <p id="loader-text" class="mt-4 text-lg font-semibold text-gray-600">파일을 분석 중입니다...</p>
+        </div>
+        
+        <!-- 결과 섹션 -->
+        <div id="results" class="hidden space-y-8">
+            <!-- 분석 요약 -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4 border-b pb-2">분석 요약</h2>
+                <div id="stats-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center"></div>
+                <div id="sentence-stats" class="mt-4 space-y-2"></div>
+            </div>
+
+            <!-- 개체명 인식(NER) 결과 섹션 -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4 border-b pb-2">자동 추출된 개체</h2>
+                <div id="ner-tabs" class="border-b border-gray-200 mb-4">
+                </div>
+                <div id="ner-content">
+                </div>
+            </div>
+
+            <!-- 단어 빈도 시각화, 인덱스 검색 -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4 border-b pb-2">단어 빈도 시각화</h2>
+                <div class="chart-container"><canvas id="wordFreqChart"></canvas></div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                 <div class="flex flex-wrap justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-2xl font-semibold">인덱스 검색</h2>
+                    <button id="downloadButton" class="bg-green-600 text-white font-bold py-2 px-6 rounded-full hover:bg-green-700">인덱스 다운로드</button>
+                </div>
+                <div class="grid grid-cols-1 gap-4 mb-4">
+                    <div>
+                         <input type="text" id="searchInput" placeholder="검색할 단어 입력..." class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th id="sort-word" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-200 transition-colors whitespace-nowrap">단어<span id="sort-indicator-word"></span></th>
+                                <th id="sort-freq" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-200 transition-colors whitespace-nowrap">빈도수<span id="sort-indicator-freq"></span></th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">라인 번호</th>
+                            </tr>
+                        </thead>
+                        <tbody id="indexTableBody" class="bg-white divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 문장 검색 결과를 보여줄 모달 -->
+    <div id="sentence-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 id="modal-title" class="text-xl font-bold">관련 문장</h3>
+                <button id="modal-close" class="text-gray-500 hover:text-gray-800">&times;</button>
+            </div>
+            <div id="modal-content" class="p-6 overflow-y-auto">
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // ============================================
+        // 전역 변수 선언
+        // ============================================
+        
+        // DOM 요소 참조
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const processButton = document.getElementById('processButton');
+        const stopWordsInput = document.getElementById('stopWords');
+        
+        // 로더 요소
+        const loaderContainer = document.getElementById('loader-container');
+        const loaderText = document.getElementById('loader-text');
+        
+        // 결과 섹션 요소
+        const resultsSection = document.getElementById('results');
+        const statsGrid = document.getElementById('stats-grid');
+        const sentenceStats = document.getElementById('sentence-stats');
+        
+        // NER 관련 요소
+        const nerTabsContainer = document.getElementById('ner-tabs');
+        const nerContentContainer = document.getElementById('ner-content');
+        
+        // 인덱스 테이블 요소
+        const searchInput = document.getElementById('searchInput');
+        const indexTableBody = document.getElementById('indexTableBody');
+        const downloadButton = document.getElementById('downloadButton');
+        const sortWordHeader = document.getElementById('sort-word');
+        const sortFreqHeader = document.getElementById('sort-freq');
+        const sortIndicatorWord = document.getElementById('sort-indicator-word');
+        const sortIndicatorFreq = document.getElementById('sort-indicator-freq');
+        
+        // 모달 요소
+        const sentenceModal = document.getElementById('sentence-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalCloseBtn = document.getElementById('modal-close');
+
+        // 데이터 저장 변수
+        let wordChart = null;
+        let fullIndex = [];
+        let allSentences = [];
+        let currentSort = { column: 'word', order: 'asc' };
+        
+        // ============================================
+        // 이벤트 리스너 등록
+        // ============================================
+        
+        // 파일 선택 시 파일 정보 표시
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const fileSizeKB = (file.size / 1024).toFixed(2);
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                const sizeDisplay = file.size < 1024 * 1024 
+                    ? `${fileSizeKB} KB` 
+                    : `${fileSizeMB} MB`;
+                fileInfo.textContent = `파일명: ${file.name} (${sizeDisplay})`;
+            } else {
+                fileInfo.textContent = '';
+            }
+        });
+        
+        // 분석 버튼 클릭
+        processButton.addEventListener('click', analyzeFile);
+        
+        // 모달 닫기
+        modalCloseBtn.addEventListener('click', () => sentenceModal.classList.add('hidden'));
+        sentenceModal.addEventListener('click', (e) => { 
+            if (e.target === sentenceModal) sentenceModal.classList.add('hidden'); 
+        });
+        
+        // 단어 컬럼 정렬
+        sortWordHeader.addEventListener('click', () => {
+            if (currentSort.column === 'word') {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = 'word';
+                currentSort.order = 'asc';
+            }
+            sortAndRender();
+        });
+        
+        // 빈도수 컬럼 정렬
+        sortFreqHeader.addEventListener('click', () => {
+            if (currentSort.column === 'freq') {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = 'freq';
+                currentSort.order = 'asc';
+            }
+            sortAndRender();
+        });
+        
+        // 검색어 입력
+        searchInput.addEventListener('input', handleSearch);
+        
+        // 인덱스 다운로드
+        downloadButton.addEventListener('click', () => {
+            let content = "--- 단어 인덱스 ---\n\n";
+            fullIndex.forEach(([word, info]) => {
+                content += `${word.padEnd(20)} (빈도: ${info.count}) -> 라인: ${info.lines.join(', ')}\n`;
+            });
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'word_index.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // ============================================
+        // 핵심 기능 함수
+        // ============================================
+        
+        /**
+         * 파일 분석 요청
+         * 서버에 파일과 불용어를 전송하여 분석 결과를 받아옴
+         */
+        async function analyzeFile() {
+            const file = fileInput.files[0];
+            if (!file) { 
+                alert('텍스트 파일을 선택해주세요.'); 
+                return; 
+            }
+            
+            // UI 초기화 및 로딩 표시
+            resultsSection.classList.add('hidden');
+            loaderContainer.style.display = 'flex';
+            loaderText.textContent = '파일을 분석 중입니다...';
+            loaderText.classList.remove('text-red-500');
+            processButton.disabled = true;
+            
+            try {
+                // FormData 생성 및 전송
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('stopWords', stopWordsInput.value);
+                
+                const response = await fetch('/analyze', { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `서버 오류: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                console.error('분석 요청 실패:', error);
+                loaderText.textContent = `분석 실패: ${error.message}`;
+                loaderText.classList.add('text-red-500');
+            } finally {
+                processButton.disabled = false;
+                if (!loaderText.classList.contains('text-red-500')) {
+                    loaderContainer.style.display = 'none';
+                }
+            }
+        }
+
+        /**
+         * 분석 결과 화면에 표시
+         * @param {Object} data - 서버로부터 받은 분석 결과
+         */
+        function displayResults(data) {
+            fullIndex = data.index;
+            allSentences = data.sentences;
+            
+            // 통계 정보 표시
+            const stats = data.stats;
+            statsGrid.innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm">총 단어 수</p>
+                    <p class="text-2xl font-bold">${stats.totalWords.toLocaleString()}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <p class="text-sm">고유 단어 수</p>
+                    <p class="text-2xl font-bold">${stats.uniqueWords.toLocaleString()}</p>
+                </div>
+            `;
+            
+            // 문장 통계 표시
+            sentenceStats.innerHTML = `
+                <div class="bg-purple-50 p-4 rounded-lg">
+                    <p class="text-sm font-semibold">가장 짧은 문장</p>
+                    <p class="text-sm break-all">${stats.shortestSentence || 'N/A'}</p>
+                </div>
+                <div class="bg-indigo-50 p-4 rounded-lg">
+                    <p class="text-sm font-semibold">가장 긴 문장</p>
+                    <p class="text-sm break-all">${stats.longestSentence || 'N/A'}</p>
+                </div>
+            `;
+            
+            // 개체명 인식 결과 표시
+            displayEntitiesAsTabs(data.entities);
+
+            // 인덱스 테이블 초기화 및 표시
+            currentSort = { column: 'word', order: 'asc' };
+            sortAndRender();
+            createFrequencyChart();
+            resultsSection.classList.remove('hidden');
+        }
+        
+        /**
+         * 개체명 인식 결과를 탭 형태로 표시
+         * @param {Object} entities - 개체명 데이터 (PERSON, GPE 등)
+         */
+        function displayEntitiesAsTabs(entities) {
+            nerTabsContainer.innerHTML = '';
+            nerContentContainer.innerHTML = '';
+            const entityLabels = { "PERSON": "인물", "GPE": "장소" };
+            let isFirstTab = true;
+
+            for (const label in entityLabels) {
+                if (entities[label] && entities[label].length > 0) {
+                    // 탭 버튼 생성
+                    const tabButton = document.createElement('button');
+                    tabButton.className = 'tab-button px-4 py-2 -mb-px border-b-2 font-semibold transition';
+                    tabButton.textContent = `${entityLabels[label]} (${entities[label].length})`;
+                    tabButton.dataset.tab = label;
+
+                    // 탭 콘텐츠 생성
+                    const tabContent = document.createElement('div');
+                    tabContent.className = 'p-4 border border-t-0 rounded-b-lg';
+                    tabContent.id = `content-${label}`;
+                    
+                    const entityContainer = document.createElement('div');
+                    entityContainer.className = 'flex flex-wrap gap-2';
+                    
+                    // 개체명 버튼 생성
+                    entities[label].forEach(name => {
+                        const entityBtn = document.createElement('button');
+                        entityBtn.className = 'bg-gray-100 text-sm px-3 py-1 rounded-full hover:bg-blue-100 transition shadow-sm';
+                        entityBtn.textContent = name;
+                        entityBtn.addEventListener('click', () => showSentencesForEntity(name));
+                        entityContainer.appendChild(entityBtn);
+                    });
+                    
+                    tabContent.appendChild(entityContainer);
+                    
+                    // 첫 번째 탭 활성화
+                    if (isFirstTab) {
+                        tabButton.classList.add('active');
+                        isFirstTab = false;
+                    } else {
+                        tabContent.classList.add('hidden');
+                    }
+                    
+                    nerTabsContainer.appendChild(tabButton);
+                    nerContentContainer.appendChild(tabContent);
+                }
+            }
+
+            // 탭 전환 이벤트 등록
+            nerTabsContainer.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    nerTabsContainer.querySelector('.active').classList.remove('active');
+                    button.classList.add('active');
+                    nerContentContainer.querySelectorAll('div').forEach(content => {
+                        content.classList.add('hidden');
+                    });
+                    document.getElementById(`content-${button.dataset.tab}`).classList.remove('hidden');
+                });
+            });
+        }
+
+        /**
+         * 특정 개체명이 포함된 문장을 모달로 표시
+         * @param {string} entityName - 검색할 개체명
+         */
+        function showSentencesForEntity(entityName) {
+            modalTitle.textContent = `"${entityName}" 관련 문장`;
+            const filtered = allSentences.filter(s => {
+                return s.toLowerCase().includes(entityName.toLowerCase());
+            });
+            
+            if (filtered.length > 0) {
+                modalContent.innerHTML = filtered.map(s => {
+                    const highlighted = s.replace(
+                        new RegExp(entityName, 'gi'), 
+                        `<strong class="bg-yellow-200">${entityName}</strong>`
+                    );
+                    return `<p class="border-b py-2">${highlighted}</p>`;
+                }).join('');
+            } else {
+                modalContent.innerHTML = '<p>관련된 문장을 찾을 수 없습니다.</p>';
+            }
+            
+            sentenceModal.classList.remove('hidden');
+        }
+
+        /**
+         * 인덱스 데이터 정렬 및 화면 갱신
+         */
+        function sortAndRender() {
+            const { column, order } = currentSort;
+            fullIndex.sort((a, b) => {
+                if (column === 'word') {
+                    return order === 'asc' 
+                        ? a[0].localeCompare(b[0]) 
+                        : b[0].localeCompare(a[0]);
+                } else {
+                    return order === 'asc' 
+                        ? a[1].count - b[1].count 
+                        : b[1].count - a[1].count;
+                }
+            });
+            handleSearch();
+            updateSortIndicators();
+        }
+
+        /**
+         * 정렬 방향 표시 업데이트
+         */
+        function updateSortIndicators() {
+            sortIndicatorWord.textContent = '';
+            sortIndicatorFreq.textContent = '';
+            const indicator = currentSort.order === 'asc' ? ' ▲' : ' ▼';
+            
+            if (currentSort.column === 'word') {
+                sortIndicatorWord.textContent = indicator;
+            } else {
+                sortIndicatorFreq.textContent = indicator;
+            }
+        }
+
+        /**
+         * 인덱스 테이블 렌더링
+         * @param {Array} data - 표시할 인덱스 데이터
+         */
+        function renderTable(data) {
+            indexTableBody.innerHTML = data.map(([word, info]) => {
+                return `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${word}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">${info.count}</td>
+                        <td class="px-6 py-4 text-sm" style="word-break: break-all;">${info.lines.join(', ')}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        /**
+         * 단어 빈도수 차트 생성
+         */
+        function createFrequencyChart() {
+            const ctx = document.getElementById('wordFreqChart').getContext('2d');
+            const sortedByFreq = [...fullIndex]
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 20);
+            
+            if (wordChart) wordChart.destroy();
+            
+            wordChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedByFreq.map(item => item[0]),
+                    datasets: [{
+                        label: '단어 빈도수',
+                        data: sortedByFreq.map(item => item[1].count),
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: { 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true 
+                        } 
+                    }, 
+                    plugins: { 
+                        legend: { 
+                            display: false 
+                        } 
+                    } 
+                }
+            });
+        }
+
+        /**
+         * 검색어에 따라 인덱스 테이블 필터링
+         */
+        function handleSearch() {
+            const query = searchInput.value.toLowerCase().trim();
+            const dataToRender = !query 
+                ? fullIndex 
+                : fullIndex.filter(([word]) => word.includes(query));
+            renderTable(dataToRender);
+        }
+
+        searchInput.addEventListener('input', handleSearch);
+
+        downloadButton.addEventListener('click', () => {
+            let content = "--- 단어 인덱스 ---\n\n";
+            // 다운로드 시 현재 정렬 상태를 반영
+            fullIndex.forEach(([word, info]) => {
+                content += `${word.padEnd(20)} (빈도: ${info.count}) -> 라인: ${info.lines.join(', ')}\n`;
+            });
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'word_index.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>

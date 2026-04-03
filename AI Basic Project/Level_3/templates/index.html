@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huffman Coding System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    
+    <script>
+        // Mermaid 초기화
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+    </script>
+    <style>
+        /* 허프만 트리 시각화 컨테이너 스타일 */
+        #mermaid-container {
+            height: 600px;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            border-radius: 0.5rem;
+        }
+        
+        /* 로딩 스피너 애니메이션 */
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #4f46e5; /* Indigo-600 */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 페이드인 애니메이션 */
+        .fade-in-up {
+            animation: fadeInUp 0.5s ease-out;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-4">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- 헤더 섹션 -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-extrabold text-indigo-700">Huffman Coding System</h1>
+            <p class="text-gray-500 mt-2">허프만 압축 및 시각화 플랫폼</p>
+        </header>
+
+        <!-- 탭 전환 버튼 (압축/해제) -->
+        <div class="flex justify-center mb-6">
+            <div class="bg-white p-1 rounded-lg shadow-sm inline-flex">
+                <button onclick="switchTab('compress')" id="tab-compress" class="px-6 py-2 rounded-md font-bold bg-indigo-600 text-white shadow-md transition-all">압축 (Compression)</button>
+                <button onclick="switchTab('decompress')" id="tab-decompress" class="px-6 py-2 rounded-md font-bold text-gray-500 hover:bg-gray-100 transition-all">해제 (Decompression)</button>
+            </div>
+        </div>
+
+        <!-- 로딩 오버레이 -->
+        <div id="loading-overlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-white p-10 rounded-2xl shadow-2xl text-center flex flex-col items-center">
+                <div class="loader mb-6"></div>
+                <h2 id="loading-text" class="text-xl font-bold text-gray-800">처리 중...</h2>
+                <p class="text-gray-500 mt-2 text-sm">잠시만 기다려주세요.</p>
+            </div>
+        </div>
+
+        <!-- 압축 뷰 -->
+        <div id="view-compress" class="space-y-6">
+            <!-- 파일 업로드 영역 -->
+            <div class="group relative w-full">
+                <div id="drop-zone-c" class="relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-indigo-300 rounded-2xl bg-indigo-50/30 hover:bg-indigo-50 hover:border-indigo-500 transition-all cursor-pointer">
+                    <!-- 숨겨진 파일 입력 -->
+                    <input type="file" id="file-input-c" class="hidden" accept=".txt">
+                    
+                    <!-- 파일 선택 안내 메시지 -->
+                    <div id="upload-prompt-c" class="flex flex-col items-center justify-center pt-5 pb-6 transition-opacity duration-300">
+                        <div class="mb-4 p-4 bg-indigo-100 text-indigo-500 rounded-full group-hover:scale-110 transition-transform">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                        </div>
+                        <p class="mb-2 text-lg font-bold text-gray-700">텍스트 파일(.txt)을 선택하세요</p>
+                    </div>
+
+                    <!-- 선택된 파일 정보 표시 -->
+                    <div id="file-info-c" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white w-full h-full z-10">
+                        <div class="flex items-center gap-4 p-6 bg-indigo-50 border border-indigo-100 rounded-xl shadow-sm max-w-md w-full mx-auto">
+                            <div class="w-12 h-12 bg-indigo-500 text-white rounded-lg flex items-center justify-center">📄</div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-indigo-600 mb-1">선택된 파일</p>
+                                <p id="filename-c" class="text-lg font-bold text-gray-900 truncate">file.txt</p>
+                                <p id="filesize-c" class="text-sm text-gray-500">0 B</p>
+                            </div>
+                            <!-- 파일 선택 취소 버튼 -->
+                            <button id="reset-file-c" class="p-2 text-gray-400 hover:text-red-500 transition-colors" title="다른 파일 선택">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        <!-- 압축 실행 버튼 -->
+                        <button id="btn-compress-action" class="mt-6 bg-indigo-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-indigo-700 shadow-lg transform transition hover:-translate-y-1">
+                            압축하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 압축 결과 표시 영역 -->
+            <div id="result-c" class="hidden space-y-6 fade-in-up">
+                <!-- 압축 통계 카드 -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <!-- 원본 크기 -->
+                    <div class="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
+                        <p class="text-xs text-gray-400 uppercase">Original</p>
+                        <p class="text-xl font-bold truncate" id="val-orig">0 B</p>
+                    </div>
+                    <!-- 압축 크기 -->
+                    <div class="bg-white p-4 rounded-lg shadow border-l-4 border-indigo-500">
+                        <p class="text-xs text-gray-400 uppercase">Compressed</p>
+                        <p class="text-xl font-bold text-indigo-600 truncate" id="val-comp">0 B</p>
+                    </div>
+                    <!-- 압축률 -->
+                    <div class="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+                        <p class="text-xs text-gray-400 uppercase">Ratio</p>
+                        <p class="text-xl font-bold text-green-600 truncate" id="val-ratio">0%</p>
+                    </div>
+                    <!-- 평균 비트 수 -->
+                    <div class="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
+                        <p class="text-xs text-gray-400 uppercase">Avg Bits</p>
+                        <p class="text-xl font-bold text-yellow-600 truncate" id="val-bits">0</p>
+                    </div>
+                    <!-- 처리 시간 -->
+                    <div class="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
+                        <p class="text-xs text-gray-400 uppercase">Time</p>
+                        <p class="text-xl font-bold text-red-600 truncate" id="val-time">0s</p>
+                    </div>
+                </div>
+
+                <!-- 시각화 및 상세 정보 영역 -->
+                <div id="viz-area" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- 허프만 트리 시각화 -->
+                    <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow flex flex-col h-[600px]">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-bold text-lg">Huffman Tree Structure</h3>
+                            <p class="text-sm text-gray-400">💡 마우스 휠: 확대/축소, 드래그: 이동</p>
+                        </div>
+                        <div id="mermaid-container" class="rounded-lg w-full flex-grow relative">
+                            <div id="mermaid-graph" class="mermaid w-full h-full"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 코드 테이블 및 바이너리 정보 -->
+                    <div class="space-y-6 flex flex-col h-[600px]">
+                        <!-- 허프만 코드 테이블 -->
+                        <div class="bg-white p-6 rounded-xl shadow flex-1 overflow-hidden flex flex-col">
+                            <h3 class="font-bold text-lg mb-2">Code Table</h3>
+                            <div class="overflow-y-auto flex-1">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-gray-100 sticky top-0"><tr><th class="p-2 text-left">Char</th><th class="p-2 text-left">Code</th></tr></thead>
+                                    <tbody id="code-table"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- 바이너리 헤더 및 다운로드 -->
+                        <div class="bg-slate-800 text-white p-6 rounded-xl shadow flex-1 flex flex-col">
+                            <h3 class="font-bold text-lg mb-2">Binary Header (Hex)</h3>
+                            <div class="flex-1 overflow-auto bg-slate-900 rounded p-2 border border-slate-700">
+                                <pre class="text-xs font-mono text-green-400 whitespace-pre" id="hex-view"></pre>
+                            </div>
+                            <a id="down-link-c" class="block mt-4 text-center bg-indigo-500 py-3 rounded text-white font-bold hover:bg-indigo-600 transition shadow-lg">Download .bin</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 압축 히스토리 테이블 -->
+                <div id="history-area" class="hidden mt-8 bg-white p-6 rounded-xl shadow fade-in-up border border-gray-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-gray-700 flex items-center gap-2">
+                            누적 분석 리포트
+                        </h3>
+                        <button onclick="clearHistory()" class="px-3 py-1 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition">기록 초기화</button>
+                    </div>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-4 py-3">File Name</th>
+                                    <th class="px-4 py-3 text-right">Original</th>
+                                    <th class="px-4 py-3 text-right">Compressed</th>
+                                    <th class="px-4 py-3 text-center">Ratio</th>
+                                    <th class="px-4 py-3 text-center">Avg Bits</th>
+                                    <th class="px-4 py-3 text-right">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body" class="divide-y divide-gray-100"></tbody>
+                            <!-- 통계 합계 -->
+                            <tfoot class="bg-indigo-50 font-bold text-indigo-900 border-t-2 border-indigo-100">
+                                <tr>
+                                    <td class="px-4 py-3">TOTAL / AVERAGE</td>
+                                    <td class="px-4 py-3 text-right" id="total-orig">-</td>
+                                    <td class="px-4 py-3 text-right" id="total-comp">-</td>
+                                    <td class="px-4 py-3 text-center text-green-600" id="avg-ratio">-</td>
+                                    <td class="px-4 py-3 text-center" id="avg-bits">-</td>
+                                    <td class="px-4 py-3 text-right" id="total-time">-</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 압축 해제 뷰 -->
+        <div id="view-decompress" class="hidden space-y-6">
+            <!-- 파일 업로드 영역 -->
+            <div class="group relative w-full">
+                <div id="drop-zone-d" class="relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-green-300 rounded-2xl bg-green-50/30 hover:bg-green-50 hover:border-green-500 transition-all cursor-pointer">
+                    <!-- 숨겨진 파일 입력 -->
+                    <input type="file" id="file-input-d" class="hidden" accept=".bin">
+                    
+                    <!-- 파일 선택 안내 메시지 -->
+                    <div id="upload-prompt-d" class="flex flex-col items-center justify-center pt-5 pb-6 transition-opacity duration-300">
+                        <div class="mb-4 p-4 bg-green-100 text-green-500 rounded-full group-hover:scale-110 transition-transform duration-300">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
+                        </div>
+                        <p class="mb-2 text-lg font-bold text-gray-700">압축 파일(.bin)을 선택하세요</p>
+                    </div>
+
+                    <!-- 선택된 파일 정보 표시 -->
+                    <div id="file-info-d" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white w-full h-full z-10 transition-all duration-300">
+                        <div class="flex items-center gap-4 p-6 bg-green-50 border border-green-100 rounded-xl shadow-sm max-w-md w-full mx-auto">
+                            <div class="flex-shrink-0 w-12 h-12 bg-green-500 text-white rounded-lg flex items-center justify-center">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-green-600 mb-1">복원할 파일</p>
+                                <p id="filename-d" class="text-lg font-bold text-gray-900 truncate">file.bin</p>
+                                <p id="filesize-d" class="text-sm text-gray-500">0 B</p>
+                            </div>
+                            <!-- 파일 선택 취소 버튼 -->
+                            <button id="reset-file-d" class="p-2 text-gray-400 hover:text-red-500 transition-colors" title="다른 파일 선택">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        <!-- 복원 실행 버튼 -->
+                        <button id="btn-restore-action" class="mt-6 bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg transform transition hover:-translate-y-1">
+                            복원하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 복원 결과 표시 영역 -->
+            <div id="result-d" class="hidden bg-white p-6 rounded-xl shadow space-y-4 fade-in-up">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="font-bold text-xl text-green-700">복원 완료!</h3>
+                    <span class="text-gray-500 text-sm bg-gray-100 px-3 py-1 rounded-full">Time: <span id="time-d" class="font-bold text-black"></span>s</span>
+                </div>
+                <!-- 복원된 텍스트 미리보기 -->
+                <div>
+                    <p class="text-sm text-gray-500 mb-2 font-bold">텍스트 원본 미리보기</p>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 h-48 overflow-auto text-sm font-mono whitespace-pre-wrap text-gray-700" id="text-preview"></div>
+                </div>
+                <!-- 복원된 파일 다운로드 링크 -->
+                <a id="down-link-d" class="flex items-center justify-center gap-2 w-full text-center bg-gray-800 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-md">
+                    복원된 텍스트 파일 다운로드
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // 전역 상태 변수
+        // ========================================
+        let compressionHistory = [];  // 압축 히스토리 배열
+        let panZoomInstance = null;   // SVG 줌/팬 인스턴스
+        let selectedCompressFile = null;    // 선택된 압축용 파일
+        let selectedDecompressFile = null;  // 선택된 해제용 파일
+
+        // ========================================
+        // 탭 전환 함수
+        // ========================================
+        /**
+         * 압축/해제 탭을 전환합니다.
+         * @param {string} mode - 'compress' 또는 'decompress'
+         */
+        function switchTab(mode) {
+            const viewC = document.getElementById('view-compress');
+            const viewD = document.getElementById('view-decompress');
+            const btnC = document.getElementById('tab-compress');
+            const btnD = document.getElementById('tab-decompress');
+
+            if (mode === 'compress') {
+                // 압축 탭 활성화
+                viewC.classList.remove('hidden');
+                viewD.classList.add('hidden');
+                btnC.className = "px-6 py-2 rounded-md font-bold bg-indigo-600 text-white shadow-md transition-all";
+                btnD.className = "px-6 py-2 rounded-md font-bold text-gray-500 hover:bg-gray-100 transition-all";
+            } else {
+                // 해제 탭 활성화
+                viewC.classList.add('hidden');
+                viewD.classList.remove('hidden');
+                btnC.className = "px-6 py-2 rounded-md font-bold text-gray-500 hover:bg-gray-100 transition-all";
+                btnD.className = "px-6 py-2 rounded-md font-bold bg-green-600 text-white shadow-md transition-all";
+            }
+        }
+
+        // ========================================
+        // 유틸리티 함수
+        // ========================================
+        /**
+         * 바이트를 읽기 쉬운 형식으로 변환합니다.
+         * @param {number} bytes - 바이트 수
+         * @param {number} decimals - 소수점 자릿수
+         * @returns {string} 포맷된 문자열 (예: "1.5 KB")
+         */
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        /**
+         * 로딩 오버레이를 표시하거나 숨깁니다.
+         * @param {boolean} show - true면 표시, false면 숨김
+         * @param {string} message - 표시할 메시지
+         */
+        function toggleLoading(show, message = "처리 중...") {
+            const overlay = document.getElementById('loading-overlay');
+            const textEl = document.getElementById('loading-text');
+            if (show) {
+                textEl.innerText = message;
+                overlay.classList.remove('hidden');
+            } else {
+                overlay.classList.add('hidden');
+            }
+        }
+
+        // ========================================
+        // 압축 로직
+        // ========================================
+        const dropZoneC = document.getElementById('drop-zone-c');
+        const fileInputC = document.getElementById('file-input-c');
+
+        // 드롭존 클릭 시 파일 선택 대화상자 열기
+        dropZoneC.addEventListener('click', () => fileInputC.click());
+        
+        // 파일 선택 시 처리
+        fileInputC.addEventListener('change', function(e) {
+            if(this.files && this.files[0]) handleFileSelectC(this.files[0]);
+        });
+
+        // 파일 선택 취소 버튼
+        document.getElementById('reset-file-c').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInputC.value = '';
+            selectedCompressFile = null;
+            document.getElementById('upload-prompt-c').classList.remove('hidden');
+            document.getElementById('file-info-c').classList.add('hidden');
+            document.getElementById('result-c').classList.add('hidden');
+            // 시각화 영역 숨기기
+            const viz = document.getElementById('viz-area');
+            if(viz) viz.classList.add('hidden');
+            
+            // 드롭존 스타일 초기화
+            dropZoneC.classList.add('border-dashed', 'border-indigo-300', 'bg-indigo-50/30');
+            dropZoneC.classList.remove('border-solid', 'border-indigo-500', 'bg-white');
+        });
+
+        // 압축 실행 버튼
+        document.getElementById('btn-compress-action').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if(selectedCompressFile) doCompress(selectedCompressFile);
+        });
+
+        /**
+         * 압축용 파일 선택 처리
+         * @param {File} file - 선택된 파일 객체
+         */
+        function handleFileSelectC(file) {
+            selectedCompressFile = file;
+            // UI 업데이트
+            document.getElementById('upload-prompt-c').classList.add('hidden');
+            document.getElementById('file-info-c').classList.remove('hidden');
+            dropZoneC.classList.remove('border-dashed', 'border-indigo-300', 'bg-indigo-50/30');
+            dropZoneC.classList.add('border-solid', 'border-indigo-500', 'bg-white');
+            // 파일 정보 표시
+            document.getElementById('filename-c').innerText = file.name;
+            document.getElementById('filesize-c').innerText = formatBytes(file.size);
+        }
+
+        /**
+         * 파일 압축 실행
+         * @param {File} file - 압축할 파일
+         */
+        async function doCompress(file) {
+            toggleLoading(true, "데이터 분석 및 압축 중...");
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // 서버에 압축 요청
+                const res = await fetch('/compress', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if(data.error) { alert("서버 오류: " + data.error); return; }
+
+                // 결과 영역 표시
+                document.getElementById('result-c').classList.remove('hidden');
+                
+                // 압축 통계 표시
+                document.getElementById('val-orig').innerText = formatBytes(data.original_size);
+                document.getElementById('val-comp').innerText = formatBytes(data.compressed_size);
+                document.getElementById('val-ratio').innerText = data.ratio + '%';
+                document.getElementById('val-bits').innerText = data.avg_bits;
+                document.getElementById('val-time').innerText = data.exec_time + 's';
+
+                // 히스토리에 추가
+                updateHistory(file.name, data.original_size, data.compressed_size, data.ratio, data.avg_bits, data.exec_time);
+
+                // 허프만 코드 테이블 생성
+                const tbody = document.getElementById('code-table');
+                tbody.innerHTML = '';
+                // 성능을 위해 상위 1000개 제한
+                let count = 0;
+                for(const [char, code] of Object.entries(data.codes)) {
+                    if(count++ > 1000) break; 
+                    let disp = char === '\n' ? '\\n' : (char === ' ' ? 'SPACE' : char);
+                    tbody.innerHTML += `<tr class="border-b hover:bg-gray-50"><td class="p-2 font-mono">${disp}</td><td class="p-2 text-indigo-600 font-mono">${code}</td></tr>`;
+                }
+
+                // Hex 뷰 표시
+                document.getElementById('hex-view').innerText = data.hex_preview;
+                document.getElementById('down-link-c').href = data.download_url;
+
+                // Mermaid 다이어그램 렌더링 (줌 기능 포함)
+                const g = document.getElementById('mermaid-graph');
+                g.innerHTML = data.mermaid_graph;
+                g.removeAttribute('data-processed');
+                
+                // 기존 줌 인스턴스 제거
+                if(panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = null; }
+
+                // Mermaid 렌더링 및 줌 기능 초기화
+                await mermaid.run({
+                    nodes: [g],
+                    postRenderCallback: (id) => {
+                        const svgElement = g.querySelector('svg');
+                        if(svgElement) {
+                            svgElement.style.width = "100%";
+                            svgElement.style.height = "100%";
+                            // SVG 줌/팬 기능 활성화
+                            panZoomInstance = svgPanZoom(svgElement, {
+                                zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true
+                            });
+                        }
+                    }
+                });
+
+            } catch (err) { 
+                alert("통신 오류 발생: " + err); 
+            } finally { 
+                toggleLoading(false); 
+            }
+        }
+
+        // ========================================
+        // 압축 해제 로직
+        // ========================================
+        const dropZoneD = document.getElementById('drop-zone-d');
+        const fileInputD = document.getElementById('file-input-d');
+
+        // 드롭존 클릭 시 파일 선택 대화상자 열기
+        dropZoneD.addEventListener('click', () => fileInputD.click());
+        
+        // 파일 선택 시 처리
+        fileInputD.addEventListener('change', function(e) {
+            if(this.files && this.files[0]) handleFileSelectD(this.files[0]);
+        });
+
+        // 파일 선택 취소 버튼
+        document.getElementById('reset-file-d').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInputD.value = '';
+            selectedDecompressFile = null;
+            document.getElementById('upload-prompt-d').classList.remove('hidden');
+            document.getElementById('file-info-d').classList.add('hidden');
+            document.getElementById('result-d').classList.add('hidden');
+            // 드롭존 스타일 초기화
+            dropZoneD.classList.add('border-dashed', 'border-green-300', 'bg-green-50/30');
+            dropZoneD.classList.remove('border-solid', 'border-green-500', 'bg-white');
+        });
+
+        // 복원 실행 버튼
+        document.getElementById('btn-restore-action').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if(selectedDecompressFile) doRestore(selectedDecompressFile);
+        });
+
+        /**
+         * 해제용 파일 선택 처리
+         * @param {File} file - 선택된 파일 객체
+         */
+        function handleFileSelectD(file) {
+            selectedDecompressFile = file;
+            // UI 업데이트
+            document.getElementById('upload-prompt-d').classList.add('hidden');
+            document.getElementById('file-info-d').classList.remove('hidden');
+            dropZoneD.classList.remove('border-dashed', 'border-green-300', 'bg-green-50/30');
+            dropZoneD.classList.add('border-solid', 'border-green-500', 'bg-white');
+            // 파일 정보 표시
+            document.getElementById('filename-d').innerText = file.name;
+            document.getElementById('filesize-d').innerText = formatBytes(file.size);
+        }
+
+        /**
+         * 파일 복원 실행
+         * @param {File} file - 복원할 파일
+         */
+        async function doRestore(file) {
+            toggleLoading(true, "데이터 복원 및 파일 생성 중...");
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                // 서버에 복원 요청
+                const res = await fetch('/decompress', { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if(data.error) { alert("서버 오류: " + data.error); return; }
+
+                if(data.success) {
+                    // 복원 결과 표시
+                    document.getElementById('result-d').classList.remove('hidden');
+                    document.getElementById('time-d').innerText = data.exec_time;
+                    document.getElementById('text-preview').innerText = data.text_preview;
+                    document.getElementById('down-link-d').href = data.download_url;
+                } else { 
+                    alert("복원 실패: " + data.error); 
+                }
+            } catch(err) { 
+                alert("통신 오류: " + err); 
+            } finally { 
+                toggleLoading(false); 
+            }
+        }
+
+        // ========================================
+        // 히스토리 관리
+        // ========================================
+        /**
+         * 압축 히스토리에 새 항목 추가 및 통계 업데이트
+         * @param {string} name - 파일명
+         * @param {number} orig - 원본 크기
+         * @param {number} comp - 압축 크기
+         * @param {string} ratio - 압축률
+         * @param {string} avgBits - 평균 비트 수
+         * @param {string} time - 처리 시간
+         */
+        function updateHistory(name, orig, comp, ratio, avgBits, time) {
+            // 히스토리 배열에 추가
+            compressionHistory.push({ name, orig, comp, ratio, avgBits, time });
+            const area = document.getElementById('history-area');
+            const tbody = document.getElementById('history-table-body');
+            area.classList.remove('hidden');
+
+            // 테이블 행 추가
+            const row = `
+                <tr class="bg-white hover:bg-gray-50 transition border-b">
+                    <td class="px-4 py-3 font-medium text-gray-900 truncate max-w-[150px]" title="${name}">${name}</td>
+                    <td class="px-4 py-3 text-right">${formatBytes(orig)}</td>
+                    <td class="px-4 py-3 text-right">${formatBytes(comp)}</td>
+                    <td class="px-4 py-3 text-center text-green-600 font-bold">${ratio}%</td>
+                    <td class="px-4 py-3 text-center text-yellow-600">${avgBits}</td>
+                    <td class="px-4 py-3 text-right text-gray-600">${time}s</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+
+            // 통계 계산
+            let totalOrig = 0, totalComp = 0, totalTime = 0, totalBits = 0;
+            compressionHistory.forEach(item => {
+                totalOrig += item.orig;
+                totalComp += item.comp;
+                totalTime += parseFloat(item.time);
+                totalBits += parseFloat(item.avgBits);
+            });
+
+            // 평균 압축률 및 평균 비트 수 계산
+            const avgRatioCalc = totalOrig > 0 ? ((1 - (totalComp / totalOrig)) * 100).toFixed(2) : "0.00";
+            const avgBitsCalc = (totalBits / compressionHistory.length).toFixed(4);
+
+            // 통계 표시 업데이트
+            document.getElementById('total-orig').innerText = formatBytes(totalOrig);
+            document.getElementById('total-comp').innerText = formatBytes(totalComp);
+            document.getElementById('avg-ratio').innerText = avgRatioCalc + '%';
+            document.getElementById('avg-bits').innerText = avgBitsCalc;
+            document.getElementById('total-time').innerText = totalTime.toFixed(4) + 's';
+        }
+
+        /**
+         * 압축 히스토리 초기화
+         */
+        function clearHistory() {
+            compressionHistory = [];
+            document.getElementById('history-table-body').innerHTML = '';
+            document.getElementById('history-area').classList.add('hidden');
+            document.getElementById('total-orig').innerText = '-';
+            document.getElementById('total-comp').innerText = '-';
+            document.getElementById('avg-ratio').innerText = '-';
+            document.getElementById('avg-bits').innerText = '-';
+            document.getElementById('total-time').innerText = '-';
+        }
+    </script>
+</body>
+</html>
